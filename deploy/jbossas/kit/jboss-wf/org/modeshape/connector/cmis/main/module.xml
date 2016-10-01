@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~
+  ~ ModeShape (http://www.modeshape.org)
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~       http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+-->
+<module xmlns="urn:jboss:module:1.3" name="org.modeshape.connector.cmis">
+    <resources>
+        <resource-root path="modeshape-connector-cmis-${project.version}.jar" />
+        <resource-root path="chemistry-opencmis-client-api-${version.org.apache.chemistry.opencmis}.jar" />
+        <resource-root path="chemistry-opencmis-client-impl-${version.org.apache.chemistry.opencmis}.jar" />
+        <resource-root path="chemistry-opencmis-commons-api-${version.org.apache.chemistry.opencmis}.jar" />
+        <resource-root path="chemistry-opencmis-commons-impl-${version.org.apache.chemistry.opencmis}.jar" />
+        <resource-root path="chemistry-opencmis-client-bindings-${version.org.apache.chemistry.opencmis}.jar" />
+        <resource-root path="jaxws-api-2.1.jar" />
+        <resource-root path="jaxws-rt-2.1.7.jar" />
+        <resource-root path="jaxb-impl-2.1.11.jar" />
+        <resource-root path="jaxb-api-2.1.jar" />
+        <resource-root path="saaj-api-1.3.jar" />
+        <resource-root path="saaj-impl-1.3.3.jar" />
+        <resource-root path="streambuffer-0.9.jar" />
+        <resource-root path="woodstox-core-asl-4.2.0.jar" />
+        <resource-root path="stax2-api-3.1.1.jar" />
+        <resource-root path="stax-ex-1.2.jar" />
+        <resource-root path="resolver-20050927.jar" />
+        <resource-root path="mimepull-1.9.4.jar" />
+        <resource-root path="activation-1.1.jar" />
+    </resources>
+
+    <dependencies>
+        <module name="org.modeshape"/>
+        <module name="javax.jws.api"/>
+        <module name="javax.xml.ws.api"/>
+        <!-- For logging (required by Apache Chemistry)... -->
+        <module name="org.slf4j"/>
+        <module name="org.slf4j.impl"/>
+    </dependencies>
+
+</module>

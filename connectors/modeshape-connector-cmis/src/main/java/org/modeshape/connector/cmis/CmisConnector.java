@@ -25,12 +25,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
 import javax.jcr.NamespaceRegistry;
 import javax.jcr.RepositoryException;
 import javax.jcr.nodetype.NodeType;
 import javax.jcr.nodetype.NodeTypeDefinition;
 import javax.jcr.nodetype.NodeTypeTemplate;
 import javax.jcr.nodetype.PropertyDefinitionTemplate;
+
 import org.apache.chemistry.opencmis.client.api.CmisObject;
 import org.apache.chemistry.opencmis.client.api.FileableCmisObject;
 import org.apache.chemistry.opencmis.client.api.Folder;
@@ -125,10 +127,16 @@ import org.w3c.dom.Element;
  * @author Ivan Vasyliev
  */
 public class CmisConnector extends Connector {
+    
+
 
     // path and id for the repository node
     private static final String REPOSITORY_INFO_ID = "repositoryInfo";
     private static final String REPOSITORY_INFO_NODE_NAME = "repositoryInfo";
+    // authentication constants
+    private static final String AUTH_HTTP_BASIC = "org.modeshape.connector.cmis.authentication.http.basic";
+    
+    private static final String CMIS_CND_PATH = "org/modeshape/connector/cmis/cmis.cnd";
     private Session session;
     private ValueFactories factories;
     // binding parameters
@@ -145,6 +153,11 @@ public class CmisConnector extends Connector {
     private String repositoryId;
     private Properties properties;
     private Nodes nodes;
+    // authentication parameters
+    private String authenticationType;
+    private String authenticationHttpBasicUser;
+    private String authenticationHttpBasicPassword;
+    
 
     private Prefix prefixes = new Prefix();
 
@@ -155,7 +168,7 @@ public class CmisConnector extends Connector {
     @SuppressWarnings( "deprecation" )
     @Override
     public void initialize( NamespaceRegistry registry,
-                            NodeTypeManager nodeTypeManager ) throws RepositoryException, IOException {
+            NodeTypeManager nodeTypeManager ) throws RepositoryException, IOException {
         super.initialize(registry, nodeTypeManager);
 
         this.factories = getContext().getValueFactories();
@@ -167,8 +180,11 @@ public class CmisConnector extends Connector {
         Map<String, String> parameter = new HashMap<String, String>();
 
         // user credentials
-        // parameter.put(SessionParameter.USER, user);
-        // parameter.put(SessionParameter.PASSWORD, passw);
+        if(AUTH_HTTP_BASIC.equals(authenticationType)) {
+            parameter.put(SessionParameter.AUTH_HTTP_BASIC, Boolean.TRUE.toString());
+            parameter.put(SessionParameter.USER, authenticationHttpBasicUser);
+            parameter.put(SessionParameter.PASSWORD, authenticationHttpBasicPassword);
+        }
 
         // connection settings
         parameter.put(SessionParameter.BINDING_TYPE, BindingType.WEBSERVICES.value());
@@ -197,6 +213,12 @@ public class CmisConnector extends Connector {
         registry.registerNamespace(CmisLexicon.Namespace.PREFIX, CmisLexicon.Namespace.URI);
         importTypes(session.getTypeDescendants(null, Integer.MAX_VALUE, true), nodeTypeManager, registry);
         registerRepositoryInfoType(nodeTypeManager);
+        
+
+//        // Register the Cmis-specific node types ...
+//        InputStream cndStream = getClass().getClassLoader().getResourceAsStream(CMIS_CND_PATH);
+//        nodeTypeManager.registerNodeTypes(cndStream, true);
+
     }
 
     @Override
@@ -207,21 +229,21 @@ public class CmisConnector extends Connector {
 
         // this action depends from object type
         switch (objectId.getType()) {
-            case REPOSITORY_INFO:
-                // convert information about repository from
-                // cmis domain into jcr domain
-                return cmisRepository();
-            case CONTENT:
-                // in the jcr domain content is represented by child node of
-                // the nt:file node while in cmis domain it is a property of
-                // the cmis:document object. This action searches original
-                // cmis:document and converts its content property into jcr node
-                return cmisContent(objectId.getIdentifier());
-            case OBJECT:
-                // converts cmis folders and documents into jcr folders and files
-                return cmisObject(objectId.getIdentifier());
-            default:
-                return null;
+        case REPOSITORY_INFO:
+            // convert information about repository from
+            // cmis domain into jcr domain
+            return cmisRepository();
+        case CONTENT:
+            // in the jcr domain content is represented by child node of
+            // the nt:file node while in cmis domain it is a property of
+            // the cmis:document object. This action searches original
+            // cmis:document and converts its content property into jcr node
+            return cmisContent(objectId.getIdentifier());
+        case OBJECT:
+            // converts cmis folders and documents into jcr folders and files
+            return cmisObject(objectId.getIdentifier());
+        default:
+            return null;
         }
     }
 
@@ -258,43 +280,43 @@ public class CmisConnector extends Connector {
 
         // this action depends from object type
         switch (objectId.getType()) {
-            case REPOSITORY_INFO:
-                // information about repository is ready only
+        case REPOSITORY_INFO:
+            // information about repository is ready only
+            return false;
+        case CONTENT:
+            // in the jcr domain content is represented by child node of
+            // the nt:file node while in cmis domain it is a property of
+            // the cmis:document object. so to perform this operation we need
+            // to restore identifier of the original cmis:document. it is easy
+            String cmisId = objectId.getIdentifier();
+
+            org.apache.chemistry.opencmis.client.api.Document doc = (org.apache.chemistry.opencmis.client.api.Document)session.getObject(cmisId);
+
+            // object exists?
+            if (doc == null) {
+                // object does not exist. propably was deleted by from cmis domain
+                // we don't know how to handle such case yet, thus TODO
                 return false;
-            case CONTENT:
-                // in the jcr domain content is represented by child node of
-                // the nt:file node while in cmis domain it is a property of
-                // the cmis:document object. so to perform this operation we need
-                // to restore identifier of the original cmis:document. it is easy
-                String cmisId = objectId.getIdentifier();
+            }
 
-                org.apache.chemistry.opencmis.client.api.Document doc = (org.apache.chemistry.opencmis.client.api.Document)session.getObject(cmisId);
+            // delete content stream
+            doc.deleteContentStream();
+            return true;
+        case OBJECT:
+            // these type points to either cmis:document or cmis:folder so
+            // we can just delete it using original identifier defined in cmis domain.
+            CmisObject object = session.getObject(objectId.getIdentifier());
 
-                // object exists?
-                if (doc == null) {
-                    // object does not exist. propably was deleted by from cmis domain
-                    // we don't know how to handle such case yet, thus TODO
-                    return false;
-                }
-
-                // delete content stream
-                doc.deleteContentStream();
-                return true;
-            case OBJECT:
-                // these type points to either cmis:document or cmis:folder so
-                // we can just delete it using original identifier defined in cmis domain.
-                CmisObject object = session.getObject(objectId.getIdentifier());
-
-                // check that object exist
-                if (object == null) {
-                    return false;
-                }
-
-                // just delete object
-                object.delete(true);
-                return true;
-            default:
+            // check that object exist
+            if (object == null) {
                 return false;
+            }
+
+            // just delete object
+            object.delete(true);
+            return true;
+        default:
+            return false;
         }
     }
 
@@ -306,21 +328,21 @@ public class CmisConnector extends Connector {
 
         // this action depends from object type
         switch (objectId.getType()) {
-            case REPOSITORY_INFO:
-                // exist always
-                return true;
-            case CONTENT:
-                // in the jcr domain content is represented by child node of
-                // the nt:file node while in cmis domain it is a property of
-                // the cmis:document object. so to perform this operation we need
-                // to restore identifier of the original cmis:document. it is easy
-                String cmisId = objectId.getIdentifier();
+        case REPOSITORY_INFO:
+            // exist always
+            return true;
+        case CONTENT:
+            // in the jcr domain content is represented by child node of
+            // the nt:file node while in cmis domain it is a property of
+            // the cmis:document object. so to perform this operation we need
+            // to restore identifier of the original cmis:document. it is easy
+            String cmisId = objectId.getIdentifier();
 
-                // now checking that this document exists
-                return session.getObject(cmisId) != null;
-            default:
-                // here we checking cmis:folder and cmis:document
-                return session.getObject(id) != null;
+            // now checking that this document exists
+            return session.getObject(cmisId) != null;
+        default:
+            // here we checking cmis:folder and cmis:document
+            return session.getObject(id) != null;
         }
     }
 
@@ -332,104 +354,104 @@ public class CmisConnector extends Connector {
 
         // this action depends from object type
         switch (objectId.getType()) {
-            case REPOSITORY_INFO:
-                // repository information is ready only
+        case REPOSITORY_INFO:
+            // repository information is ready only
+            return;
+        case CONTENT:
+            // in the jcr domain content is represented by child node of
+            // the nt:file node while in cmis domain it is a property of
+            // the cmis:document object. so to perform this operation we need
+            // to restore identifier of the original cmis:document. it is easy
+            String cmisId = objectId.getIdentifier();
+
+            // now let's get the reference to this object
+            CmisObject cmisObject = session.getObject(cmisId);
+
+            // object exists?
+            if (cmisObject == null) {
+                // object does not exist. propably was deleted by from cmis domain
+                // we don't know how to handle such case yet, thus TODO
                 return;
-            case CONTENT:
-                // in the jcr domain content is represented by child node of
-                // the nt:file node while in cmis domain it is a property of
-                // the cmis:document object. so to perform this operation we need
-                // to restore identifier of the original cmis:document. it is easy
-                String cmisId = objectId.getIdentifier();
+            }
 
-                // now let's get the reference to this object
-                CmisObject cmisObject = session.getObject(cmisId);
+            // original object is here so converting binary value and
+            // updating original cmis:document
+            ContentStream stream = jcrBinaryContent(document);
+            if (stream != null) {
+                ((org.apache.chemistry.opencmis.client.api.Document)cmisObject).setContentStream(stream, true);
+            }
+            break;
+        case OBJECT:
+            // extract node properties from the document view
+            Document jcrProperties = document.getDocument("properties");
 
-                // object exists?
-                if (cmisObject == null) {
-                    // object does not exist. propably was deleted by from cmis domain
-                    // we don't know how to handle such case yet, thus TODO
-                    return;
-                }
+            // check that we have jcr properties to store in the cmis repo
+            if (jcrProperties == null) {
+                // nothing to store
+                return;
+            }
 
-                // original object is here so converting binary value and
-                // updating original cmis:document
-                ContentStream stream = jcrBinaryContent(document);
-                if (stream != null) {
-                    ((org.apache.chemistry.opencmis.client.api.Document)cmisObject).setContentStream(stream, true);
-                }
-                break;
-            case OBJECT:
-                // extract node properties from the document view
-                Document jcrProperties = document.getDocument("properties");
+            // if node has properties we need to pickup cmis object from
+            // cmis repository, convert properties from jcr domain to cmis
+            // and update properties
+            cmisObject = session.getObject(objectId.getIdentifier());
 
-                // check that we have jcr properties to store in the cmis repo
-                if (jcrProperties == null) {
-                    // nothing to store
-                    return;
-                }
+            // unknown object?
+            if (cmisObject == null) {
+                // exit silently
+                return;
+            }
 
-                // if node has properties we need to pickup cmis object from
-                // cmis repository, convert properties from jcr domain to cmis
-                // and update properties
-                cmisObject = session.getObject(objectId.getIdentifier());
+            // Prepare store for the cmis properties
+            Map<String, Object> updateProperties = new HashMap<String, Object>();
 
-                // unknown object?
-                if (cmisObject == null) {
-                    // exit silently
-                    return;
-                }
+            // ask cmis repository to get property definitions
+            // we will use these definitions for correct conversation
+            Map<String, PropertyDefinition<?>> propDefs = cmisObject.getBaseType().getPropertyDefinitions();
 
-                // Prepare store for the cmis properties
-                Map<String, Object> updateProperties = new HashMap<String, Object>();
+            // jcr properties are grouped by namespace uri
+            // we will travers over all namespaces (ie group of properties)
+            for (Field field : jcrProperties.fields()) {
+                // field has namespace uri as field's name and properties
+                // as value
+                // getting namespace uri and properties
+                String namespaceUri = field.getName();
+                Document props = field.getValueAsDocument();
 
-                // ask cmis repository to get property definitions
-                // we will use these definitions for correct conversation
-                Map<String, PropertyDefinition<?>> propDefs = cmisObject.getBaseType().getPropertyDefinitions();
+                // namespace uri uniquily defines prefix for the property name
+                String prefix = prefixes.value(namespaceUri);
 
-                // jcr properties are grouped by namespace uri
-                // we will travers over all namespaces (ie group of properties)
-                for (Field field : jcrProperties.fields()) {
-                    // field has namespace uri as field's name and properties
-                    // as value
-                    // getting namespace uri and properties
-                    String namespaceUri = field.getName();
-                    Document props = field.getValueAsDocument();
+                // now scroll over properties
+                for (Field property : props.fields()) {
+                    // getting jcr fully qualified name of property
+                    // then determine the the name of this property
+                    // in the cmis domain
+                    String jcrPropertyName = prefix + property.getName();
+                    String cmisPropertyName = properties.findCmisName(jcrPropertyName);
 
-                    // namespace uri uniquily defines prefix for the property name
-                    String prefix = prefixes.value(namespaceUri);
+                    // now we need to convert value, we will use
+                    // property definition from the original cmis repo for this step
+                    PropertyDefinition<?> pdef = propDefs.get(cmisPropertyName);
 
-                    // now scroll over properties
-                    for (Field property : props.fields()) {
-                        // getting jcr fully qualified name of property
-                        // then determine the the name of this property
-                        // in the cmis domain
-                        String jcrPropertyName = prefix + property.getName();
-                        String cmisPropertyName = properties.findCmisName(jcrPropertyName);
-
-                        // now we need to convert value, we will use
-                        // property definition from the original cmis repo for this step
-                        PropertyDefinition<?> pdef = propDefs.get(cmisPropertyName);
-
-                        // unknown property?
-                        if (pdef == null) {
-                            // ignore
-                            return;
-                        }
-
-                        // make conversation for the value
-                        Object cmisValue = properties.cmisValue(pdef, property);
-
-                        // store properties for update
-                        updateProperties.put(cmisPropertyName, cmisValue);
+                    // unknown property?
+                    if (pdef == null) {
+                        // ignore
+                        return;
                     }
-                }
 
-                // finaly execute update action
-                if (!updateProperties.isEmpty()) {
-                    cmisObject.updateProperties(updateProperties);
+                    // make conversation for the value
+                    Object cmisValue = properties.cmisValue(pdef, property);
+
+                    // store properties for update
+                    updateProperties.put(cmisPropertyName, cmisValue);
                 }
-                break;
+            }
+
+            // finaly execute update action
+            if (!updateProperties.isEmpty()) {
+                cmisObject.updateProperties(updateProperties);
+            }
+            break;
         }
     }
 
@@ -441,155 +463,155 @@ public class CmisConnector extends Connector {
 
         // this action depends from object type
         switch (objectId.getType()) {
-            case REPOSITORY_INFO:
-                // repository node is read only
-                break;
-            case CONTENT:
-                // in the jcr domain content is represented by child node of
-                // the nt:file node while in cmis domain it is a property of
-                // the cmis:document object. so to perform this operation we need
-                // to restore identifier of the original cmis:document. it is easy
-                String cmisId = objectId.getIdentifier();
+        case REPOSITORY_INFO:
+            // repository node is read only
+            break;
+        case CONTENT:
+            // in the jcr domain content is represented by child node of
+            // the nt:file node while in cmis domain it is a property of
+            // the cmis:document object. so to perform this operation we need
+            // to restore identifier of the original cmis:document. it is easy
+            String cmisId = objectId.getIdentifier();
 
-                // now let's get the reference to this object
-                CmisObject cmisObject = session.getObject(cmisId);
+            // now let's get the reference to this object
+            CmisObject cmisObject = session.getObject(cmisId);
 
-                // object exists?
-                if (cmisObject == null) {
-                    // object does not exist. propably was deleted by from cmis domain
-                    // we don't know how to handle such case yet, thus TODO
-                    return;
+            // object exists?
+            if (cmisObject == null) {
+                // object does not exist. propably was deleted by from cmis domain
+                // we don't know how to handle such case yet, thus TODO
+                return;
+            }
+
+            PropertyChanges changes = delta.getPropertyChanges();
+            // for this case we have only one property jcr:data
+            // what we need to understant it is what kind of action
+
+            if (!changes.getRemoved().isEmpty()) {
+                // we need to remove
+                ((org.apache.chemistry.opencmis.client.api.Document)cmisObject).deleteContentStream();
+            } else {
+                ContentStream stream = jcrBinaryContent(delta.getDocument());
+                if (stream != null) {
+                    ((org.apache.chemistry.opencmis.client.api.Document)cmisObject).setContentStream(stream, true);
+                }
+            }
+            break;
+        case OBJECT:
+            // modifing cmis:folders and cmis:documents
+            cmisObject = session.getObject(objectId.getIdentifier());
+            changes = delta.getPropertyChanges();
+
+            Document props = delta.getDocument().getDocument("properties");
+
+            // checking that object exists
+            if (cmisObject == null) {
+                // unknown object
+                return;
+            }
+
+            // Prepare store for the cmis properties
+            Map<String, Object> updateProperties = new HashMap<String, Object>();
+
+            // ask cmis repository to get property definitions
+            // we will use these definitions for correct conversation
+            Map<String, PropertyDefinition<?>> propDefs = cmisObject.getBaseType().getPropertyDefinitions();
+
+            // group added and modified properties
+            ArrayList<Name> modifications = new ArrayList<Name>();
+            modifications.addAll(changes.getAdded());
+            modifications.addAll(changes.getChanged());
+
+            // convert names and values
+            for (Name name : modifications) {
+                String prefix = prefixes.value(name.getNamespaceUri());
+
+                // prefixed name of the property in jcr domain is
+                String jcrPropertyName = prefix != null ? prefix + ":" + name.getLocalName() : name.getLocalName();
+                // the name of this property in cmis domain is
+                String cmisPropertyName = properties.findCmisName(jcrPropertyName);
+
+                // in cmis domain this property is defined as
+                PropertyDefinition<?> pdef = propDefs.get(cmisPropertyName);
+
+                // unknown property?
+                if (pdef == null) {
+                    // ignore
+                    continue;
                 }
 
-                PropertyChanges changes = delta.getPropertyChanges();
-                // for this case we have only one property jcr:data
-                // what we need to understant it is what kind of action
+                // convert value and store
+                Document jcrValues = props.getDocument(name.getNamespaceUri());
+                updateProperties.put(cmisPropertyName, properties.cmisValue(pdef, name.getLocalName(), jcrValues));
 
-                if (!changes.getRemoved().isEmpty()) {
-                    // we need to remove
-                    ((org.apache.chemistry.opencmis.client.api.Document)cmisObject).deleteContentStream();
-                } else {
-                    ContentStream stream = jcrBinaryContent(delta.getDocument());
-                    if (stream != null) {
-                        ((org.apache.chemistry.opencmis.client.api.Document)cmisObject).setContentStream(stream, true);
-                    }
-                }
-                break;
-            case OBJECT:
-                // modifing cmis:folders and cmis:documents
-                cmisObject = session.getObject(objectId.getIdentifier());
-                changes = delta.getPropertyChanges();
+            }
 
-                Document props = delta.getDocument().getDocument("properties");
+            // step #2: nullify removed properties
+            for (Name name : changes.getRemoved()) {
+                String prefix = prefixes.value(name.getNamespaceUri());
 
-                // checking that object exists
-                if (cmisObject == null) {
-                    // unknown object
-                    return;
+                // prefixed name of the property in jcr domain is
+                String jcrPropertyName = prefix != null ? prefix + ":" + name.getLocalName() : name.getLocalName();
+                // the name of this property in cmis domain is
+                String cmisPropertyName = properties.findCmisName(jcrPropertyName);
+
+                // in cmis domain this property is defined as
+                PropertyDefinition<?> pdef = propDefs.get(cmisPropertyName);
+
+                // unknown property?
+                if (pdef == null) {
+                    // ignore
+                    continue;
                 }
 
-                // Prepare store for the cmis properties
-                Map<String, Object> updateProperties = new HashMap<String, Object>();
+                updateProperties.put(cmisPropertyName, null);
+            }
 
-                // ask cmis repository to get property definitions
-                // we will use these definitions for correct conversation
-                Map<String, PropertyDefinition<?>> propDefs = cmisObject.getBaseType().getPropertyDefinitions();
+            // run update action
+            if (!updateProperties.isEmpty()) {
+                cmisObject.updateProperties(updateProperties);
+            }
 
-                // group added and modified properties
-                ArrayList<Name> modifications = new ArrayList<Name>();
-                modifications.addAll(changes.getAdded());
-                modifications.addAll(changes.getChanged());
+            ChildrenChanges childrenChanges = delta.getChildrenChanges();
+            Map<String, Name> renamed = new HashMap<>();
+            renamed.putAll(childrenChanges.getRenamed());
+            renamed.putAll(childrenChanges.getAppended());
 
-                // convert names and values
-                for (Name name : modifications) {
-                    String prefix = prefixes.value(name.getNamespaceUri());
+            String before, after;
+            for (String key : renamed.keySet()) {
+                CmisObject object = session.getObject(key);
+                if (object == null) continue;
 
-                    // prefixed name of the property in jcr domain is
-                    String jcrPropertyName = prefix != null ? prefix + ":" + name.getLocalName() : name.getLocalName();
-                    // the name of this property in cmis domain is
-                    String cmisPropertyName = properties.findCmisName(jcrPropertyName);
+                // check if name was changed
+                before = object.getName();
+                after = renamed.get(key).getLocalName();
+                if (after.equals(before)) continue;
 
-                    // in cmis domain this property is defined as
-                    PropertyDefinition<?> pdef = propDefs.get(cmisPropertyName);
-
-                    // unknown property?
-                    if (pdef == null) {
-                        // ignore
-                        continue;
-                    }
-
-                    // convert value and store
-                    Document jcrValues = props.getDocument(name.getNamespaceUri());
-                    updateProperties.put(cmisPropertyName, properties.cmisValue(pdef, name.getLocalName(), jcrValues));
-
+                // determine if in child's parent already exists a child with same name
+                if (isExistCmisObject(((FileableCmisObject) object).getParents().get(0).getPath() + "/" + after)) {
+                    // already exists, so generates a temporary name
+                    after += "-temp";
                 }
 
-                // step #2: nullify removed properties
-                for (Name name : changes.getRemoved()) {
-                    String prefix = prefixes.value(name.getNamespaceUri());
+                rename(object, after);
+            }
 
-                    // prefixed name of the property in jcr domain is
-                    String jcrPropertyName = prefix != null ? prefix + ":" + name.getLocalName() : name.getLocalName();
-                    // the name of this property in cmis domain is
-                    String cmisPropertyName = properties.findCmisName(jcrPropertyName);
+            // run move action
+            if (delta.getParentChanges().hasNewPrimaryParent()) {
+                FileableCmisObject object = (FileableCmisObject)cmisObject;
+                CmisObject source = object.getParents().get(0);
+                CmisObject destination = session.getObject(delta.getParentChanges().getNewPrimaryParent());
 
-                    // in cmis domain this property is defined as
-                    PropertyDefinition<?> pdef = propDefs.get(cmisPropertyName);
+                object.move(source, destination);
 
-                    // unknown property?
-                    if (pdef == null) {
-                        // ignore
-                        continue;
-                    }
-
-                    updateProperties.put(cmisPropertyName, null);
+                // rename temporary name to a original
+                String name = object.getName();
+                if (name.endsWith("-temp")) {
+                    rename(object, name.replace("-temp", ""));
                 }
+            }
 
-                // run update action
-                if (!updateProperties.isEmpty()) {
-                    cmisObject.updateProperties(updateProperties);
-                }
-
-                ChildrenChanges childrenChanges = delta.getChildrenChanges();
-                Map<String, Name> renamed = new HashMap<>();
-                renamed.putAll(childrenChanges.getRenamed());
-                renamed.putAll(childrenChanges.getAppended());
-
-                String before, after;
-                for (String key : renamed.keySet()) {
-                    CmisObject object = session.getObject(key);
-                    if (object == null) continue;
-
-                    // check if name was changed
-                    before = object.getName();
-                    after = renamed.get(key).getLocalName();
-                    if (after.equals(before)) continue;
-
-                    // determine if in child's parent already exists a child with same name
-                    if (isExistCmisObject(((FileableCmisObject) object).getParents().get(0).getPath() + "/" + after)) {
-                        // already exists, so generates a temporary name
-                        after += "-temp";
-                    }
-
-                    rename(object, after);
-                }
-            
-                // run move action
-                if (delta.getParentChanges().hasNewPrimaryParent()) {
-                    FileableCmisObject object = (FileableCmisObject)cmisObject;
-                    CmisObject source = object.getParents().get(0);
-                    CmisObject destination = session.getObject(delta.getParentChanges().getNewPrimaryParent());
-
-                    object.move(source, destination);
-
-                    // rename temporary name to a original
-                    String name = object.getName();
-                    if (name.endsWith("-temp")) {
-                        rename(object, name.replace("-temp", ""));
-                    }
-                }
-                
-                break;
+            break;
         }
     }
 
@@ -627,8 +649,8 @@ public class CmisConnector extends Connector {
 
     @Override
     public String newDocumentId( String parentId,
-                                 Name name,
-                                 Name primaryType ) {
+            Name name,
+            Name primaryType ) {
         HashMap<String, Object> params = new HashMap<String, Object>();
 
         // let'start from checking primary type
@@ -664,13 +686,13 @@ public class CmisConnector extends Connector {
 
         // create object and id for it.
         switch (objectType.getBaseTypeId()) {
-            case CMIS_FOLDER:
-                params.put(PropertyIds.PATH, path);
-                return ObjectId.toString(ObjectId.Type.OBJECT, parent.createFolder(params).getId());
-            case CMIS_DOCUMENT:
-                return ObjectId.toString(ObjectId.Type.OBJECT, parent.createDocument(params, null, VersioningState.NONE).getId());
-            default:
-                return null;
+        case CMIS_FOLDER:
+            params.put(PropertyIds.PATH, path);
+            return ObjectId.toString(ObjectId.Type.OBJECT, parent.createFolder(params).getId());
+        case CMIS_DOCUMENT:
+            return ObjectId.toString(ObjectId.Type.OBJECT, parent.createDocument(params, null, VersioningState.NONE).getId());
+        default:
+            return null;
         }
     }
 
@@ -690,14 +712,14 @@ public class CmisConnector extends Connector {
 
         // converting CMIS object to JCR node
         switch (cmisObject.getBaseTypeId()) {
-            case CMIS_FOLDER:
-                return cmisFolder(cmisObject);
-            case CMIS_DOCUMENT:
-                return cmisDocument(cmisObject);
-            case CMIS_POLICY:
-            case CMIS_RELATIONSHIP:
-            case CMIS_SECONDARY:
-            case CMIS_ITEM:
+        case CMIS_FOLDER:
+            return cmisFolder(cmisObject);
+        case CMIS_DOCUMENT:
+            return cmisDocument(cmisObject);
+        case CMIS_POLICY:
+        case CMIS_RELATIONSHIP:
+        case CMIS_SECONDARY:
+        case CMIS_ITEM:
         }
 
         // unexpected object type
@@ -816,7 +838,7 @@ public class CmisConnector extends Connector {
      * @param writer JCR node representation.
      */
     private void cmisProperties( CmisObject object,
-                                 DocumentWriter writer ) {
+            DocumentWriter writer ) {
         // convert properties
         List<Property<?>> list = object.getProperties();
         for (Property<?> property : list) {
@@ -834,7 +856,7 @@ public class CmisConnector extends Connector {
      * @param writer JCR node representation
      */
     private void cmisChildren( Folder folder,
-                               DocumentWriter writer ) {
+            DocumentWriter writer ) {
         ItemIterable<CmisObject> it = folder.getChildren();
         for (CmisObject obj : it) {
             writer.addChild(obj.getId(), obj.getName());
@@ -899,8 +921,8 @@ public class CmisConnector extends Connector {
      * @throws RepositoryException if there is a problem importing the types
      */
     private void importTypes( List<Tree<ObjectType>> types,
-                              NodeTypeManager typeManager,
-                              NamespaceRegistry registry ) throws RepositoryException {
+            NodeTypeManager typeManager,
+            NamespaceRegistry registry ) throws RepositoryException {
         for (Tree<ObjectType> tree : types) {
             importType(tree.getItem(), typeManager, registry);
             importTypes(tree.getChildren(), typeManager, registry);
@@ -917,8 +939,8 @@ public class CmisConnector extends Connector {
      */
     @SuppressWarnings( "unchecked" )
     public void importType( ObjectType cmisType,
-                            NodeTypeManager typeManager,
-                            NamespaceRegistry registry ) throws RepositoryException {
+            NodeTypeManager typeManager,
+            NamespaceRegistry registry ) throws RepositoryException {
         // TODO: get namespace information and register
         // registry.registerNamespace(cmisType.getLocalNamespace(), cmisType.getLocalNamespace());
 

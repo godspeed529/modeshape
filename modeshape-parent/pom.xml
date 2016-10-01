@@ -910,6 +910,11 @@
             </dependency>
             <dependency>
                 <groupId>org.modeshape</groupId>
+                <artifactId>modeshape-connector-cmis</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.modeshape</groupId>
                 <artifactId>modeshape-connector-git</artifactId>
                 <version>${project.version}</version>
             </dependency>

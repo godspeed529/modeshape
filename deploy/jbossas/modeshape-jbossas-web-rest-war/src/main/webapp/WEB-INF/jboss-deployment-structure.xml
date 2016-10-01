@@ -5,6 +5,7 @@
             <module name="org.modeshape.jcr.api" services="import"/>
             <module name="org.modeshape" services="import"/>
             <module name="org.modeshape.persistence.relational" services="import"/>
+            <module name="org.modeshape.connector.cmis" services="import"/>
         </dependencies>
     </deployment>
 </jboss-deployment-structure>

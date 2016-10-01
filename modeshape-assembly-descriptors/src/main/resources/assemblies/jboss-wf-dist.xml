@@ -205,6 +205,31 @@
             </includes>
         </dependencySet>
 
+        <dependencySet>
+            <useProjectArtifact>false</useProjectArtifact>
+            <outputDirectory>modules/org/modeshape/connector/cmis/main</outputDirectory>
+            <includes>
+                <include>org.modeshape:modeshape-connector-cmis:jar</include>
+                <include>org.apache.chemistry.opencmis:chemistry-opencmis-client-api:jar</include>
+                <include>org.apache.chemistry.opencmis:chemistry-opencmis-client-impl:jar</include>
+                <include>org.apache.chemistry.opencmis:chemistry-opencmis-commons-api:jar</include>
+                <include>org.apache.chemistry.opencmis:chemistry-opencmis-commons-impl:jar</include>
+                <include>org.apache.chemistry.opencmis:chemistry-opencmis-client-bindings:jar</include>
+                <include>javax.xml.ws:jaxws-api:jar</include>
+                <include>com.sun.xml.ws:jaxws-rt:jar</include>
+                <include>com.sun.xml.messaging.saaj:saaj-impl:jar</include>
+                <include>com.sun.xml.stream.buffer:streambuffer:jar</include>
+                <include>org.codehaus.woodstox:woodstox-core-asl:jar</include>
+                <include>org.codehaus.woodstox:stax2-api:jar</include>
+                <include>org.jvnet.staxex:stax-ex:jar</include>
+                <include>com.sun.org.apache.xml.internal:resolver:jar</include>
+                <include>org.jvnet.mimepull:mimepull:jar</include>
+                <include>com.sun.xml.bind:jaxb-impl:jar</include>
+                <include>javax.xml.bind:jaxb-api:jar</include>
+                <include>javax.activation:activation:jar</include>
+                <include>javax.xml.soap:saaj-api:jar</include>
+            </includes>
+        </dependencySet>
 
         <!--Sequencers-->
         <dependencySet>
