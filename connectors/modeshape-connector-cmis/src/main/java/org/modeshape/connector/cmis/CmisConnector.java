@@ -134,6 +134,9 @@ public class CmisConnector extends Connector {
     // path and id for the repository node
     private static final String REPOSITORY_INFO_ID = "repositoryInfo";
     private static final String REPOSITORY_INFO_NODE_NAME = "repositoryInfo";
+    // authentication constants
+    private static final String AUTH_HTTP_BASIC = "org.modeshape.connector.cmis.authentication.http.basic";
+
     private Session session;
     private ValueFactories factories;
     // binding parameters
@@ -150,6 +153,11 @@ public class CmisConnector extends Connector {
     private String repositoryId;
     private Properties properties;
     private Nodes nodes;
+    // authentication parameters
+    private String authenticationType;
+    private String authenticationHttpBasicUser;
+    private String authenticationHttpBasicPassword;
+
 
     private Prefix prefixes = new Prefix();
     private final OperationContext ctx = new OperationContextImpl();
@@ -174,8 +182,12 @@ public class CmisConnector extends Connector {
         Map<String, String> parameter = new HashMap<String, String>();
 
         // user credentials
-        // parameter.put(SessionParameter.USER, user);
-        // parameter.put(SessionParameter.PASSWORD, passw);
+        // user credentials
+        if(AUTH_HTTP_BASIC.equals(authenticationType)) {
+            parameter.put(SessionParameter.AUTH_HTTP_BASIC, Boolean.TRUE.toString());
+            parameter.put(SessionParameter.USER, authenticationHttpBasicUser);
+            parameter.put(SessionParameter.PASSWORD, authenticationHttpBasicPassword);
+        }
 
         // connection settings
         parameter.put(SessionParameter.BINDING_TYPE, BindingType.WEBSERVICES.value());
